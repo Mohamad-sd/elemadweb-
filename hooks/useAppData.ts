@@ -42,8 +42,8 @@ export const useAppData = () => {
       }
   };
 
-  const getUserRoleByPhone = useCallback((phone: string): UserRole | null => {
-    return RentService.getUserRole(phone);
+  const authenticate = useCallback((email: string, password: string): UserRole | null => {
+    return RentService.authenticate(email, password);
   }, []);
 
   const addPayment = useCallback(async (paymentData: any) => {
@@ -117,7 +117,7 @@ export const useAppData = () => {
 
   return { 
       locations, houses, tenants, payments, leaseRequests, handovers, isLoaded,
-      getUserRoleByPhone, addPayment, addLeaseRequest, approveLeaseRequest, rejectLeaseRequest,
+      authenticate, addPayment, addLeaseRequest, approveLeaseRequest, rejectLeaseRequest,
       vacateHouse, addCashHandover, addLocation, updateLocation, deleteLocation,
       addHouse, updateHouse, deleteHouse, refreshData
     };

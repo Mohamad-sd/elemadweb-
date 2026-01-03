@@ -12,31 +12,24 @@ interface LoginScreenProps {
 }
 
 const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
-  const [phone, setPhone] = useState('');
-  const [otp, setOtp] = useState('');
-  const [otpSent, setOtpSent] = useState(false);
-  const [determinedRole, setDeterminedRole] = useState<UserRole | null>(null);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const context = useContext(AppDataContext);
-
-  const handleSendOtp = () => {
-    if (phone.match(/^\d{10}$/)) { // Simple validation for 10 digit number
-      const role = context?.getUserRoleByPhone(phone);
-      if (role) {
-        setDeterminedRole(role);
-        setOtpSent(true);
-      } else {
-        alert("هذا الرقم غير مسجل في النظام.");
-      }
-    } else {
-      alert("الرجاء إدخال رقم جوال صحيح (10 أرقام)");
-    }
-  };
   
-  const handleLogin = () => {
-    if (otp === '1234' && determinedRole) {
-        onLogin(determinedRole);
+  const handleLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!context) return;
+
+    if (!email || !password) {
+        alert("الرجاء إدخال البريد الإلكتروني وكلمة المرور");
+        return;
+    }
+
+    const role = context.authenticate(email, password);
+    if (role) {
+        onLogin(role);
     } else {
-        alert("رمز التحقق غير صحيح. استخدم 1234");
+        alert("البريد الإلكتروني أو كلمة المرور غير صحيحة");
     }
   };
 
@@ -46,44 +39,35 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
         <div className="text-center mb-6">
           <BuildingIcon className="mx-auto h-12 w-12 text-blue-600" />
           <h1 className="text-3xl font-bold text-gray-800 mt-2">تسجيل الدخول</h1>
-          <p className="text-gray-600">نظام تحصيل الإيجارات</p>
+          <p className="text-gray-600">نظام العماد لإدارة العقارات</p>
         </div>
-        {!otpSent ? (
-          <div className="space-y-4">
+        
+        <form onSubmit={handleLogin} className="space-y-4">
             <Input 
-              label="رقم الجوال" 
-              id="phone" 
-              type="tel" 
-              placeholder="مثال: 05xxxxxxx" 
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
+              label="البريد الإلكتروني" 
+              id="email" 
+              type="email" 
+              placeholder="user@elemad.ae" 
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
             />
-            <p className="text-center text-xs text-gray-500 mt-2">
-                للتجربة:<br/>
-                محصل: <span className="font-mono">0511111111</span><br/>
-                مدير: <span className="font-mono">0522222222</span>
-            </p>
-            <Button onClick={handleSendOtp} className="w-full">إرسال رمز التحقق</Button>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            <p className="text-center text-gray-600">
-                تم إرسال رمز التحقق إلى {phone}. <br/> (للتجربة، أدخل 1234)
-                <span className="font-bold text-blue-600 mt-2 block">
-                    سيتم تسجيل دخولك كـ: {determinedRole === UserRole.COLLECTOR ? 'محصل' : 'مدير'}
-                </span>
-            </p>
             <Input 
-              label="رمز التحقق (OTP)" 
-              id="otp" 
-              type="text" 
-              placeholder="xxxx" 
-              value={otp}
-              onChange={(e) => setOtp(e.target.value)}
+              label="كلمة المرور" 
+              id="password" 
+              type="password" 
+              placeholder="••••••••" 
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
             />
-            <Button onClick={handleLogin} className="w-full" variant="primary">تسجيل الدخول</Button>
-          </div>
-        )}
+            
+            <Button type="submit" className="w-full" variant="primary">تسجيل الدخول</Button>
+        </form>
+
+        <div className="mt-6 border-t pt-4 text-xs text-gray-400 text-center">
+            <p>للدعم الفني يرجى التواصل مع الإدارة</p>
+        </div>
       </Card>
     </div>
   );

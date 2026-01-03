@@ -22,9 +22,10 @@ const initialHouses: House[] = [
   { id: 'house4', locationId: 'loc2', name: 'فيلا A', tenantId: null, rentAmount: 5000, dueAmount: 0, unpaidAmount: 0 },
 ];
 
+// Updated users with specific credentials
 const initialUsers = [
-  { phone: '0511111111', role: UserRole.COLLECTOR, name: 'المحصل أحمد' },
-  { phone: '0522222222', role: UserRole.MANAGER, name: 'المدير خالد' },
+  { email: 'user@elemad.ae', password: 'sameer@1234', role: UserRole.COLLECTOR, name: 'المحصل سمير' },
+  { email: 'admin@elemad.ae', password: 'Omar@2018', role: UserRole.MANAGER, name: 'المدير عمر' },
 ];
 
 // --- Interface for Database ---
@@ -75,8 +76,8 @@ export const RentService = {
   },
 
   // --- Auth Service ---
-  getUserRole(phone: string): UserRole | null {
-      const user = initialUsers.find(u => u.phone === phone);
+  authenticate(email: string, password: string): UserRole | null {
+      const user = initialUsers.find(u => u.email.toLowerCase() === email.toLowerCase() && u.password === password);
       return user ? user.role : null;
   },
 
