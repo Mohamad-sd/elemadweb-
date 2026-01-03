@@ -211,7 +211,7 @@ const VacantHousesScreen = () => {
     return (
         <div className="space-y-8 animate-fadeIn">
             <div>
-                <h2 className="text-xl font-bold mb-4 flex items-center gap-2"><HomeIcon className="text-green-600"/> منازل فارغة (للتأجير)</h2>
+                <h2 className="text-xl font-bold mb-4 flex items-center gap-2"><HomeIcon className="w-5 h-5 text-green-600"/> منازل فارغة (للتأجير)</h2>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {context?.houses.filter(h => !h.tenantId).map(house => (
                         <Card key={house.id} className="border-t-4 border-green-500">
@@ -224,7 +224,7 @@ const VacantHousesScreen = () => {
             </div>
 
             <div>
-                <h2 className="text-xl font-bold mb-4 flex items-center gap-2"><HomeIcon className="text-red-600"/> منازل مؤجرة (للإخلاء)</h2>
+                <h2 className="text-xl font-bold mb-4 flex items-center gap-2"><HomeIcon className="w-5 h-5 text-red-600"/> منازل مؤجرة (للإخلاء)</h2>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {context?.houses.filter(h => h.tenantId).map(house => (
                         <Card key={house.id} className="border-t-4 border-red-500">
