@@ -77,7 +77,13 @@ export const RentService = {
 
   // --- Auth Service ---
   authenticate(email: string, password: string): UserRole | null {
-      const user = initialUsers.find(u => u.email.toLowerCase() === email.toLowerCase() && u.password === password);
+      const cleanEmail = email.trim().toLowerCase();
+      const cleanPassword = password.trim();
+      
+      const user = initialUsers.find(u => 
+        u.email.toLowerCase() === cleanEmail && 
+        u.password === cleanPassword
+      );
       return user ? user.role : null;
   },
 

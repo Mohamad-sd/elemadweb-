@@ -25,7 +25,11 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
         return;
     }
 
-    const role = context.authenticate(email, password);
+    // Trim whitespace from email and password to prevent common input errors
+    const cleanEmail = email.trim();
+    const cleanPassword = password.trim();
+
+    const role = context.authenticate(cleanEmail, cleanPassword);
     if (role) {
         onLogin(role);
     } else {
