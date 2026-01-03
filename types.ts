@@ -29,6 +29,7 @@ export interface House {
   rentAmount: number;
   dueAmount: number;
   unpaidAmount: number;
+  lastRentUpdate?: Date; // New field to track when rent was last added
 }
 
 export interface Payment {

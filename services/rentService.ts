@@ -15,9 +15,10 @@ const initialTenants: Tenant[] = [
     { id: 'ten2', name: 'فاطمة علي', idNumber: '0987654321', idPhotoUrl: 'https://picsum.photos/200/300' },
 ];
 
+// Added lastRentUpdate to seed data to prevent immediate double-charge on first load
 const initialHouses: House[] = [
-  { id: 'house1', locationId: 'loc1', name: 'شقة 101', tenantId: 'ten1', rentAmount: 2500, dueAmount: 2500, unpaidAmount: 0 },
-  { id: 'house2', locationId: 'loc1', name: 'شقة 102', tenantId: 'ten2', rentAmount: 2800, dueAmount: 5600, unpaidAmount: 2800 },
+  { id: 'house1', locationId: 'loc1', name: 'شقة 101', tenantId: 'ten1', rentAmount: 2500, dueAmount: 2500, unpaidAmount: 0, lastRentUpdate: new Date() },
+  { id: 'house2', locationId: 'loc1', name: 'شقة 102', tenantId: 'ten2', rentAmount: 2800, dueAmount: 5600, unpaidAmount: 2800, lastRentUpdate: new Date() },
   { id: 'house3', locationId: 'loc1', name: 'شقة 103', tenantId: null, rentAmount: 2600, dueAmount: 0, unpaidAmount: 0 },
   { id: 'house4', locationId: 'loc2', name: 'فيلا A', tenantId: null, rentAmount: 5000, dueAmount: 0, unpaidAmount: 0 },
 ];
@@ -64,10 +65,49 @@ export const RentService = {
       const str = localStorage.getItem(STORAGE_KEY);
       const data = str ? JSON.parse(str) : null;
       
-      // Re-hydrate Date objects from JSON strings
       if (data) {
+          // Re-hydrate Date objects from JSON strings
           data.payments = (data.payments || []).map((p: any) => ({ ...p, date: new Date(p.date) }));
           data.handovers = (data.handovers || []).map((h: any) => ({ ...h, date: new Date(h.date) }));
+          
+          // --- AUTOMATIC RENT ACCRUAL LOGIC ---
+          const now = new Date();
+          const currentMonthKey = `${now.getFullYear()}-${now.getMonth()}`; // e.g., "2023-10"
+          let hasChanges = false;
+
+          data.houses = data.houses.map((h: any) => {
+              // Only process occupied houses
+              if (!h.tenantId) return h;
+
+              // Parse stored date or default to null
+              const lastUpdate = h.lastRentUpdate ? new Date(h.lastRentUpdate) : null;
+              
+              if (!lastUpdate) {
+                  // If no date exists (legacy data), mark it as updated NOW so we don't double charge immediately,
+                  // assuming the current dueAmount is correct. Next month it will trigger.
+                  return { ...h, lastRentUpdate: now };
+              }
+
+              const lastUpdateKey = `${lastUpdate.getFullYear()}-${lastUpdate.getMonth()}`;
+
+              // If the current month is different (later) than the last update month
+              // This simple check works for moving from Oct to Nov, or Dec to Jan.
+              if (currentMonthKey !== lastUpdateKey && now > lastUpdate) {
+                  console.log(`Adding rent for house ${h.name}: New Month Detected`);
+                  hasChanges = true;
+                  return {
+                      ...h,
+                      dueAmount: h.dueAmount + h.rentAmount,
+                      lastRentUpdate: now
+                  };
+              }
+
+              return h;
+          });
+
+          if (hasChanges) {
+              await this.saveDatabase(data);
+          }
       }
       return data;
   },
@@ -151,8 +191,9 @@ export const RentService = {
                   ...house,
                   tenantId: newTenant.id,
                   rentAmount: request.rentAmount,
-                  dueAmount: request.rentAmount,
+                  dueAmount: request.rentAmount, // Initial rent due
                   unpaidAmount: 0,
+                  lastRentUpdate: new Date(), // Set current date as the start of billing
               };
           }
           return house;
@@ -176,7 +217,9 @@ export const RentService = {
       const db = await this.getDatabase();
       db.houses = db.houses.map(h => {
           if (h.id === houseId) {
-              return { ...h, tenantId: null, dueAmount: 0, unpaidAmount: 0 };
+              // Clear tenant and reset due amount, also clear lastRentUpdate
+              const { lastRentUpdate, ...rest } = h; 
+              return { ...rest, tenantId: null, dueAmount: 0, unpaidAmount: 0 };
           }
           return h;
       });
