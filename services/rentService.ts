@@ -25,6 +25,7 @@ const initialHouses: House[] = [
 // Updated users with specific credentials
 const initialUsers = [
   { email: 'user@elemad.ae', password: 'sameer@1234', role: UserRole.COLLECTOR, name: 'المحصل سمير' },
+  { email: 'user1@alemad.ae', password: 'user1@1234', role: UserRole.COLLECTOR, name: 'المحصل 2' },
   { email: 'admin@elemad.ae', password: 'Omar@2018', role: UserRole.MANAGER, name: 'المدير عمر' },
 ];
 
