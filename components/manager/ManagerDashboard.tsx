@@ -139,7 +139,49 @@ const StatBox = ({ label, value, color }: any) => {
 const PropertyManagementScreen = () => {
     const context = useContext(AppDataContext);
     const [selectedLoc, setSelectedLoc] = useState('');
+    const [isAddModalOpen, setAddModalOpen] = useState(false);
+    const [isLocationModalOpen, setLocationModalOpen] = useState(false);
+    
+    // Form state for new house
+    const [houseName, setHouseName] = useState('');
+    const [locationId, setLocationId] = useState('');
+    const [rentAmount, setRentAmount] = useState('');
+
+    // Form state for new location
+    const [newLocationName, setNewLocationName] = useState('');
+
     const filteredHouses = context?.houses.filter(h => !selectedLoc || h.locationId === selectedLoc);
+
+    const handleAddHouse = () => {
+        if (!houseName || !locationId || !rentAmount) {
+             alert("الرجاء تعبئة جميع البيانات (الاسم، الموقع، الإيجار)");
+             return;
+        }
+
+        context?.addHouse({
+            name: houseName,
+            locationId: locationId,
+            rentAmount: parseFloat(rentAmount)
+        });
+
+        setAddModalOpen(false);
+        // Reset form
+        setHouseName('');
+        setLocationId('');
+        setRentAmount('');
+        alert("تم إضافة العقار بنجاح");
+    };
+
+    const handleAddLocation = () => {
+        if (!newLocationName.trim()) {
+            alert("الرجاء إدخال اسم الموقع");
+            return;
+        }
+        context?.addLocation(newLocationName);
+        setNewLocationName('');
+        setLocationModalOpen(false);
+        alert("تم إضافة الموقع بنجاح");
+    };
 
     return (
         <div className="space-y-6 animate-fadeIn">
@@ -150,7 +192,8 @@ const PropertyManagementScreen = () => {
                         <option value="">كل المناطق</option>
                         {context?.locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
                     </Select>
-                    <Button onClick={() => alert("ميزة إضافة عقار قيد التطوير")} variant="primary">إضافة عقار +</Button>
+                    <Button onClick={() => setLocationModalOpen(true)} variant="secondary">إضافة موقع +</Button>
+                    <Button onClick={() => setAddModalOpen(true)} variant="primary">إضافة عقار +</Button>
                 </div>
             </div>
 
@@ -163,11 +206,46 @@ const PropertyManagementScreen = () => {
                         </div>
                         <div className="text-left">
                             <p className="text-xs text-gray-400">الإيجار</p>
-                            <p className="font-bold text-blue-600">{house.rentAmount}</p>
+                            <p className="font-bold text-blue-600">{house.rentAmount.toLocaleString()} ريال</p>
                         </div>
                     </Card>
                 ))}
             </div>
+
+            <Modal isOpen={isAddModalOpen} onClose={() => setAddModalOpen(false)} title="إضافة وحدة عقارية جديدة">
+                <div className="space-y-4">
+                    <Input 
+                        label="اسم الوحدة (مثال: شقة 5، محل 3)" 
+                        value={houseName} 
+                        onChange={e => setHouseName(e.target.value)} 
+                        placeholder="اسم الوحدة"
+                    />
+                    <Select label="الموقع / المبنى" value={locationId} onChange={e => setLocationId(e.target.value)}>
+                        <option value="">اختر الموقع...</option>
+                        {context?.locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+                    </Select>
+                    <Input 
+                        label="قيمة الإيجار الافتراضية" 
+                        type="number" 
+                        value={rentAmount} 
+                        onChange={e => setRentAmount(e.target.value)} 
+                        placeholder="0"
+                    />
+                    <Button onClick={handleAddHouse} className="w-full" variant="success">حفظ العقار</Button>
+                </div>
+            </Modal>
+
+            <Modal isOpen={isLocationModalOpen} onClose={() => setLocationModalOpen(false)} title="إضافة موقع / مبنى جديد">
+                <div className="space-y-4">
+                    <Input 
+                        label="اسم الموقع / المبنى" 
+                        value={newLocationName} 
+                        onChange={e => setNewLocationName(e.target.value)} 
+                        placeholder="مثال: مجمع العليا السكني"
+                    />
+                    <Button onClick={handleAddLocation} className="w-full" variant="success">حفظ الموقع</Button>
+                </div>
+            </Modal>
         </div>
     );
 };
