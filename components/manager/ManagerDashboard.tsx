@@ -13,6 +13,7 @@ import DollarSignIcon from '../icons/DollarSignIcon';
 import CheckCircleIcon from '../icons/CheckCircleIcon';
 import XCircleIcon from '../icons/XCircleIcon';
 import ReportIcon from '../icons/ReportIcon';
+import TrashIcon from '../icons/TrashIcon';
 // Add UserIcon import to fix the "Cannot find name 'UserIcon'" error
 import UserIcon from '../icons/UserIcon';
 
@@ -179,8 +180,20 @@ const PropertyManagementScreen = () => {
         }
         context?.addLocation(newLocationName);
         setNewLocationName('');
-        setLocationModalOpen(false);
+        // We keep the modal open to allow adding more or deleting existing
         alert("تم إضافة الموقع بنجاح");
+    };
+
+    const handleDeleteLocation = (id: string) => {
+        if (confirm("هل أنت متأكد من حذف هذا الموقع؟")) {
+            context?.deleteLocation(id);
+        }
+    };
+
+    const handleDeleteHouse = (id: string) => {
+        if (confirm("هل أنت متأكد من حذف هذا العقار؟")) {
+            context?.deleteHouse(id);
+        }
     };
 
     return (
@@ -192,7 +205,7 @@ const PropertyManagementScreen = () => {
                         <option value="">كل المناطق</option>
                         {context?.locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
                     </Select>
-                    <Button onClick={() => setLocationModalOpen(true)} variant="secondary">إضافة موقع +</Button>
+                    <Button onClick={() => setLocationModalOpen(true)} variant="secondary">إدارة المواقع</Button>
                     <Button onClick={() => setAddModalOpen(true)} variant="primary">إضافة عقار +</Button>
                 </div>
             </div>
@@ -200,13 +213,18 @@ const PropertyManagementScreen = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {filteredHouses?.map(house => (
                     <Card key={house.id} className="flex justify-between items-center border-l-4 border-gray-300">
-                        <div>
+                        <div className="flex-1">
                             <p className="font-bold text-lg">{house.name}</p>
                             <p className="text-xs text-gray-500">{context.locations.find(l=>l.id===house.locationId)?.name}</p>
                         </div>
-                        <div className="text-left">
-                            <p className="text-xs text-gray-400">الإيجار</p>
-                            <p className="font-bold text-blue-600">{house.rentAmount.toLocaleString()} ريال</p>
+                        <div className="text-left flex flex-col items-end gap-2">
+                            <div>
+                                <p className="text-xs text-gray-400">الإيجار</p>
+                                <p className="font-bold text-blue-600">{house.rentAmount.toLocaleString()} ريال</p>
+                            </div>
+                            <button onClick={() => handleDeleteHouse(house.id)} className="text-red-400 hover:text-red-600 hover:bg-red-50 p-1 rounded transition-colors" title="حذف العقار">
+                                <TrashIcon className="w-5 h-5"/>
+                            </button>
                         </div>
                     </Card>
                 ))}
@@ -235,15 +253,36 @@ const PropertyManagementScreen = () => {
                 </div>
             </Modal>
 
-            <Modal isOpen={isLocationModalOpen} onClose={() => setLocationModalOpen(false)} title="إضافة موقع / مبنى جديد">
-                <div className="space-y-4">
-                    <Input 
-                        label="اسم الموقع / المبنى" 
-                        value={newLocationName} 
-                        onChange={e => setNewLocationName(e.target.value)} 
-                        placeholder="مثال: مجمع العليا السكني"
-                    />
-                    <Button onClick={handleAddLocation} className="w-full" variant="success">حفظ الموقع</Button>
+            <Modal isOpen={isLocationModalOpen} onClose={() => setLocationModalOpen(false)} title="إدارة المواقع / المباني">
+                <div className="space-y-6">
+                    <div className="space-y-2 border-b pb-6">
+                        <Input 
+                            label="إضافة موقع جديد" 
+                            value={newLocationName} 
+                            onChange={e => setNewLocationName(e.target.value)} 
+                            placeholder="مثال: مجمع العليا السكني"
+                        />
+                        <Button onClick={handleAddLocation} className="w-full" variant="success">حفظ الموقع الجديد</Button>
+                    </div>
+
+                    <div>
+                        <h4 className="font-bold text-gray-700 mb-3">قائمة المواقع الحالية</h4>
+                        <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                            {context?.locations.map(loc => (
+                                <div key={loc.id} className="flex justify-between items-center bg-gray-50 p-3 rounded-lg border border-gray-100">
+                                    <span className="font-medium text-gray-700">{loc.name}</span>
+                                    <button 
+                                        onClick={() => handleDeleteLocation(loc.id)} 
+                                        className="text-red-500 hover:text-red-700 hover:bg-red-50 p-2 rounded-full transition-colors"
+                                        title="حذف الموقع"
+                                    >
+                                        <TrashIcon className="w-4 h-4"/>
+                                    </button>
+                                </div>
+                            ))}
+                            {context?.locations.length === 0 && <p className="text-gray-400 text-sm text-center">لا توجد مواقع مضافة</p>}
+                        </div>
+                    </div>
                 </div>
             </Modal>
         </div>

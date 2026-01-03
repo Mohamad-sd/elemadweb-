@@ -111,8 +111,13 @@ export const useAppData = () => {
     // In a real app, this would also call RentService.updateHouse
   }, []);
 
-  const deleteHouse = useCallback((id: string) => {
-    setHouses(prev => prev.filter(h => h.id !== id));
+  const deleteHouse = useCallback(async (id: string) => {
+    try {
+        const updatedHouses = await RentService.deleteHouse(id);
+        setHouses(updatedHouses);
+    } catch (e: any) {
+        alert(e.message);
+    }
   }, []);
 
   return { 

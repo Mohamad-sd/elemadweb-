@@ -215,7 +215,7 @@ export const RentService = {
   async deleteLocation(id: string) {
       const db = await this.getDatabase();
       const hasHouses = db.houses.some(h => h.locationId === id);
-      if (hasHouses) throw new Error("لا يمكن حذف موقع يحتوي على عقارات");
+      if (hasHouses) throw new Error("لا يمكن حذف موقع يحتوي على عقارات. قم بحذف العقارات أو نقلها أولاً.");
       
       db.locations = db.locations.filter(l => l.id !== id);
       await this.saveDatabase(db);
@@ -233,6 +233,18 @@ export const RentService = {
           ...houseData
       };
       db.houses.push(newHouse);
+      await this.saveDatabase(db);
+      return db.houses;
+  },
+
+  async deleteHouse(id: string) {
+      const db = await this.getDatabase();
+      const house = db.houses.find(h => h.id === id);
+      
+      if (!house) throw new Error("العقار غير موجود");
+      if (house.tenantId) throw new Error("لا يمكن حذف عقار مسكون (مؤجر). قم بإخلاء العقار أولاً.");
+      
+      db.houses = db.houses.filter(h => h.id !== id);
       await this.saveDatabase(db);
       return db.houses;
   }
