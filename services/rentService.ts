@@ -1,7 +1,7 @@
 
 import { Location, House, Tenant, Payment, NewLeaseRequest, CashHandover, UserRole } from '../types';
 
-const STORAGE_KEY = 'rent_app_db_production_v1';
+const STORAGE_KEY = 'rent_app_db_production_v2';
 
 // --- Initial Seed Data (Simulating a fresh database) ---
 const initialLocations: Location[] = [
@@ -15,12 +15,12 @@ const initialTenants: Tenant[] = [
     { id: 'ten2', name: 'فاطمة علي', idNumber: '0987654321', idPhotoUrl: 'https://picsum.photos/200/300' },
 ];
 
-// Added lastRentUpdate to seed data to prevent immediate double-charge on first load
+// Added unpaidMonths to seed data
 const initialHouses: House[] = [
-  { id: 'house1', locationId: 'loc1', name: 'شقة 101', tenantId: 'ten1', rentAmount: 2500, dueAmount: 2500, unpaidAmount: 0, lastRentUpdate: new Date() },
-  { id: 'house2', locationId: 'loc1', name: 'شقة 102', tenantId: 'ten2', rentAmount: 2800, dueAmount: 5600, unpaidAmount: 2800, lastRentUpdate: new Date() },
-  { id: 'house3', locationId: 'loc1', name: 'شقة 103', tenantId: null, rentAmount: 2600, dueAmount: 0, unpaidAmount: 0 },
-  { id: 'house4', locationId: 'loc2', name: 'فيلا A', tenantId: null, rentAmount: 5000, dueAmount: 0, unpaidAmount: 0 },
+  { id: 'house1', locationId: 'loc1', name: 'شقة 101', tenantId: 'ten1', rentAmount: 2500, dueAmount: 2500, unpaidAmount: 0, lastRentUpdate: new Date(), unpaidMonths: ['2023-10'] },
+  { id: 'house2', locationId: 'loc1', name: 'شقة 102', tenantId: 'ten2', rentAmount: 2800, dueAmount: 5600, unpaidAmount: 2800, lastRentUpdate: new Date(), unpaidMonths: ['2023-09', '2023-10'] },
+  { id: 'house3', locationId: 'loc1', name: 'شقة 103', tenantId: null, rentAmount: 2600, dueAmount: 0, unpaidAmount: 0, unpaidMonths: [] },
+  { id: 'house4', locationId: 'loc2', name: 'فيلا A', tenantId: null, rentAmount: 5000, dueAmount: 0, unpaidAmount: 0, unpaidMonths: [] },
 ];
 
 // Updated users with specific credentials
@@ -69,40 +69,51 @@ export const RentService = {
           // Re-hydrate Date objects from JSON strings
           data.payments = (data.payments || []).map((p: any) => ({ ...p, date: new Date(p.date) }));
           data.handovers = (data.handovers || []).map((h: any) => ({ ...h, date: new Date(h.date) }));
+          data.houses = (data.houses || []).map((h: any) => ({ 
+              ...h, 
+              lastRentUpdate: h.lastRentUpdate ? new Date(h.lastRentUpdate) : null,
+              unpaidMonths: h.unpaidMonths || [] // Ensure array exists for legacy data
+          }));
           
-          // --- AUTOMATIC RENT ACCRUAL LOGIC ---
+          // --- ROBUST AUTOMATIC RENT ACCRUAL LOGIC ---
           const now = new Date();
-          const currentMonthKey = `${now.getFullYear()}-${now.getMonth()}`; // e.g., "2023-10"
           let hasChanges = false;
 
-          data.houses = data.houses.map((h: any) => {
+          data.houses = data.houses.map((h: House) => {
               // Only process occupied houses
               if (!h.tenantId) return h;
 
-              // Parse stored date or default to null
-              const lastUpdate = h.lastRentUpdate ? new Date(h.lastRentUpdate) : null;
+              // Parse stored date or default to now if missing (to prevent massive initial charge)
+              let lastUpdate = h.lastRentUpdate ? new Date(h.lastRentUpdate) : new Date();
               
-              if (!lastUpdate) {
-                  // If no date exists (legacy data), mark it as updated NOW so we don't double charge immediately,
-                  // assuming the current dueAmount is correct. Next month it will trigger.
-                  return { ...h, lastRentUpdate: now };
-              }
+              // We want to check if we moved to a new month relative to the last update.
+              // Logic: Loop adding months until lastUpdate matches current month/year
+              
+              let updatedHouse = { ...h };
+              let modified = false;
 
-              const lastUpdateKey = `${lastUpdate.getFullYear()}-${lastUpdate.getMonth()}`;
-
-              // If the current month is different (later) than the last update month
-              // This simple check works for moving from Oct to Nov, or Dec to Jan.
-              if (currentMonthKey !== lastUpdateKey && now > lastUpdate) {
-                  console.log(`Adding rent for house ${h.name}: New Month Detected`);
+              // While lastUpdate's Month < Current Month (handling year rollover)
+              // This loop runs for every month missed.
+              while (
+                  (lastUpdate.getFullYear() < now.getFullYear()) || 
+                  (lastUpdate.getFullYear() === now.getFullYear() && lastUpdate.getMonth() < now.getMonth())
+              ) {
+                  // Move to next month
+                  lastUpdate.setMonth(lastUpdate.getMonth() + 1);
+                  
+                  // Construct month string YYYY-MM
+                  const monthStr = `${lastUpdate.getFullYear()}-${(lastUpdate.getMonth() + 1).toString().padStart(2, '0')}`;
+                  
+                  console.log(`Accruing rent for ${h.name}: ${monthStr}`);
+                  
+                  updatedHouse.dueAmount += updatedHouse.rentAmount;
+                  updatedHouse.unpaidMonths.push(monthStr);
+                  updatedHouse.lastRentUpdate = new Date(lastUpdate); // Update the tracker
+                  modified = true;
                   hasChanges = true;
-                  return {
-                      ...h,
-                      dueAmount: h.dueAmount + h.rentAmount,
-                      lastRentUpdate: now
-                  };
               }
 
-              return h;
+              return modified ? updatedHouse : h;
           });
 
           if (hasChanges) {
@@ -142,11 +153,27 @@ export const RentService = {
       
       db.payments.push(newPayment);
 
-      // Backend Logic: Update House Balance
+      // Backend Logic: Update House Balance & Remove Paid Months
       db.houses = db.houses.map(h => {
           if (h.id === paymentData.houseId) {
               const newDueAmount = Math.max(0, h.dueAmount - paymentData.amount);
-              return { ...h, dueAmount: newDueAmount };
+              
+              // Calculate how many FULL months were covered by this payment
+              // This is a heuristic: we remove the oldest months first based on rent amount
+              const rent = h.rentAmount > 0 ? h.rentAmount : paymentData.amount;
+              const monthsCovered = Math.floor(paymentData.amount / rent);
+              
+              let newUnpaidMonths = [...(h.unpaidMonths || [])];
+              if (monthsCovered > 0 && newUnpaidMonths.length > 0) {
+                  // Remove oldest X months
+                  newUnpaidMonths.splice(0, monthsCovered);
+              }
+
+              return { 
+                  ...h, 
+                  dueAmount: newDueAmount,
+                  unpaidMonths: newUnpaidMonths
+              };
           }
           return h;
       });
@@ -184,6 +211,10 @@ export const RentService = {
       };
       db.tenants.push(newTenant);
 
+      // Current month string for initial rent
+      const now = new Date();
+      const currentMonthStr = `${now.getFullYear()}-${(now.getMonth() + 1).toString().padStart(2, '0')}`;
+
       // Assign tenant to house
       db.houses = db.houses.map(house => {
           if (house.id === request.houseId) {
@@ -193,7 +224,8 @@ export const RentService = {
                   rentAmount: request.rentAmount,
                   dueAmount: request.rentAmount, // Initial rent due
                   unpaidAmount: 0,
-                  lastRentUpdate: new Date(), // Set current date as the start of billing
+                  lastRentUpdate: now, // Set current date as the start of billing
+                  unpaidMonths: [currentMonthStr] // Add current month as first unpaid month
               };
           }
           return house;
@@ -217,9 +249,15 @@ export const RentService = {
       const db = await this.getDatabase();
       db.houses = db.houses.map(h => {
           if (h.id === houseId) {
-              // Clear tenant and reset due amount, also clear lastRentUpdate
+              // Clear tenant, reset amounts, clear months
               const { lastRentUpdate, ...rest } = h; 
-              return { ...rest, tenantId: null, dueAmount: 0, unpaidAmount: 0 };
+              return { 
+                  ...rest, 
+                  tenantId: null, 
+                  dueAmount: 0, 
+                  unpaidAmount: 0,
+                  unpaidMonths: []
+              };
           }
           return h;
       });
@@ -273,6 +311,7 @@ export const RentService = {
           tenantId: null,
           dueAmount: 0,
           unpaidAmount: 0,
+          unpaidMonths: [],
           ...houseData
       };
       db.houses.push(newHouse);

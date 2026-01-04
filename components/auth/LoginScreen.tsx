@@ -28,6 +28,8 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
     // Trim whitespace from email and password to prevent common input errors
     const cleanEmail = email.trim();
     const cleanPassword = password.trim();
+    
+    console.log("Attempting login:", cleanEmail);
 
     const role = context.authenticate(cleanEmail, cleanPassword);
     if (role) {
@@ -69,7 +71,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
             <Button type="submit" className="w-full" variant="primary">تسجيل الدخول</Button>
         </form>
 
-        <div className="mt-6 border-t pt-4 text-xs text-gray-400 text-center">
+        <div className="mt-6 border-t pt-4 text-xs text-gray-500 text-center space-y-3">
             <p>للدعم الفني يرجى التواصل مع الإدارة</p>
         </div>
       </Card>

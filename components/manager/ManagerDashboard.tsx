@@ -165,15 +165,19 @@ const DashboardStats = () => {
         if (!context) return;
         const data = context.houses.map(h => {
             const loc = context.locations.find(l => l.id === h.locationId);
+            // Format months list
+            const monthsStr = h.unpaidMonths && h.unpaidMonths.length > 0 ? h.unpaidMonths.join(', ') : 'None';
+            
             return {
                 Name: h.name,
                 Location: loc?.name || '',
                 Status: h.tenantId ? 'Rented' : 'Vacant',
                 RentAmount: h.rentAmount,
-                DueAmount: h.dueAmount
+                DueAmount: h.dueAmount,
+                UnpaidMonths: monthsStr
             };
         });
-        exportToCSV(data, ['Name', 'Location', 'Status', 'Rent', 'Due'], 'Properties_Report');
+        exportToCSV(data, ['Name', 'Location', 'Status', 'Rent', 'Due', 'Months Due'], 'Properties_Report');
     };
 
     const handleSharePaymentsPDF = () => {
@@ -193,12 +197,13 @@ const DashboardStats = () => {
 
     const handleSharePropertiesPDF = () => {
         if (!context) return;
-        const head = [['Unit', 'Status', 'Rent (SAR)', 'Due (SAR)']];
+        const head = [['Unit', 'Status', 'Rent', 'Due', 'Unpaid Months']];
         const body = context.houses.map(h => [
             h.name,
             h.tenantId ? 'Rented' : 'Vacant',
             h.rentAmount.toLocaleString(),
-            h.dueAmount.toLocaleString()
+            h.dueAmount.toLocaleString(),
+            h.unpaidMonths && h.unpaidMonths.length > 0 ? h.unpaidMonths.join(', ') : '-'
         ]);
         sharePDF('Properties Status Report', head, body, 'properties_report');
     };
@@ -369,6 +374,11 @@ const PropertyManagementScreen = () => {
                         <div className="flex-1">
                             <p className="font-bold text-lg">{house.name}</p>
                             <p className="text-xs text-gray-500">{context.locations.find(l=>l.id===house.locationId)?.name}</p>
+                            {house.unpaidMonths && house.unpaidMonths.length > 0 && (
+                                <p className="text-[10px] text-red-500 mt-1 font-bold">
+                                    مستحق: {house.unpaidMonths.slice(0, 3).join(', ')}{house.unpaidMonths.length > 3 ? '...' : ''}
+                                </p>
+                            )}
                         </div>
                         <div className="text-left flex flex-col items-end gap-2">
                             <div>

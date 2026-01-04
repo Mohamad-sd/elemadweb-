@@ -30,6 +30,7 @@ export interface House {
   dueAmount: number;
   unpaidAmount: number;
   lastRentUpdate?: Date; // New field to track when rent was last added
+  unpaidMonths: string[]; // List of specific months due e.g., ["2023-10", "2023-11"]
 }
 
 export interface Payment {
