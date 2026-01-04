@@ -328,7 +328,7 @@ const CollectorReports = () => {
                         <div key={p.id} className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
                             <div>
                                 <p className="font-bold text-sm">{context.houses.find(h => h.id === p.houseId)?.name}</p>
-                                <p className="text-[10px] text-gray-400">{p.date.toLocaleString('ar-SA')}</p>
+                                <p className="text-[10px] text-gray-400">{p.date.toLocaleString('en-GB')}</p>
                             </div>
                             <span className="font-bold text-green-600">+{p.amount}</span>
                         </div>

@@ -1,7 +1,7 @@
 
 import React, { useState, useContext, useMemo } from 'react';
 import { AppDataContext } from '../../App';
-import { House, NewLeaseRequest, Location } from '../../types';
+import { House, NewLeaseRequest, Location, Payment } from '../../types';
 import Button from '../shared/Button';
 import Card from '../shared/Card';
 import Modal from '../shared/Modal';
@@ -14,8 +14,11 @@ import CheckCircleIcon from '../icons/CheckCircleIcon';
 import XCircleIcon from '../icons/XCircleIcon';
 import ReportIcon from '../icons/ReportIcon';
 import TrashIcon from '../icons/TrashIcon';
-// Add UserIcon import to fix the "Cannot find name 'UserIcon'" error
 import UserIcon from '../icons/UserIcon';
+import DownloadIcon from '../icons/DownloadIcon';
+import WhatsAppIcon from '../icons/WhatsAppIcon';
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 type ManagerView = 'dashboard' | 'management' | 'approvals' | 'handovers';
 
@@ -43,7 +46,7 @@ const ManagerDashboard: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
           <h1 className="text-xl font-bold tracking-tight">لوحة الإدارة</h1>
         </div>
         <nav className="flex-1 p-4 flex flex-col gap-2">
-          <SidebarLink active={currentView === 'dashboard'} onClick={() => setCurrentView('dashboard')} label="نظرة عامة" icon={<DollarSignIcon className="w-5 h-5"/>} />
+          <SidebarLink active={currentView === 'dashboard'} onClick={() => setCurrentView('dashboard')} label="نظرة عامة والتقارير" icon={<DollarSignIcon className="w-5 h-5"/>} />
           <SidebarLink active={currentView === 'management'} onClick={() => setCurrentView('management')} label="إدارة العقارات" icon={<HomeIcon className="w-5 h-5"/>} />
           <SidebarLink active={currentView === 'approvals'} onClick={() => setCurrentView('approvals')} label="الموافقات" icon={<CheckCircleIcon className="w-5 h-5"/>} badge={context.leaseRequests.filter(r => r.status === 'pending').length} />
           <SidebarLink active={currentView === 'handovers'} onClick={() => setCurrentView('handovers')} label="تسليم المبالغ" icon={<ReportIcon className="w-5 h-5"/>} />
@@ -69,6 +72,69 @@ const SidebarLink = ({ active, onClick, label, icon, badge }: any) => (
     </button>
 );
 
+// --- Export Helper Function for CSV ---
+const exportToCSV = (data: any[], headers: string[], filename: string) => {
+    let csvContent = "\uFEFF"; 
+    csvContent += headers.join(",") + "\n";
+    data.forEach(row => {
+        const rowString = Object.values(row).map(value => {
+            const stringValue = String(value);
+            return `"${stringValue.replace(/"/g, '""')}"`;
+        }).join(",");
+        csvContent += rowString + "\n";
+    });
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `${filename}_${new Date().toISOString().slice(0,10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+};
+
+// --- Helper for PDF Share ---
+const sharePDF = async (title: string, head: string[][], body: (string|number)[][], fileName: string) => {
+    const doc = new jsPDF();
+    
+    // Add Title
+    doc.setFontSize(18);
+    doc.text(title, 105, 15, { align: 'center' });
+    doc.setFontSize(10);
+    doc.text(`Date: ${new Date().toLocaleDateString('en-GB')}`, 105, 22, { align: 'center' });
+
+    // Create Table
+    autoTable(doc, {
+        head: head,
+        body: body,
+        startY: 30,
+        theme: 'grid',
+        headStyles: { fillColor: [41, 128, 185], halign: 'center' },
+        bodyStyles: { halign: 'center' },
+    });
+
+    const pdfBlob = doc.output('blob');
+    const file = new File([pdfBlob], `${fileName}.pdf`, { type: 'application/pdf' });
+
+    // Try Web Share API (Mobile)
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        try {
+            await navigator.share({
+                files: [file],
+                title: title,
+                text: `Here is the ${title} report.`,
+            });
+        } catch (error) {
+            console.log('Sharing failed', error);
+        }
+    } else {
+        // Fallback for Desktop: Download + WhatsApp Web Link
+        doc.save(`${fileName}.pdf`);
+        const waUrl = `https://wa.me/?text=${encodeURIComponent(`Please find the attached ${title} (downloaded to your device).`)}`;
+        window.open(waUrl, '_blank');
+    }
+};
+
 const DashboardStats = () => {
     const context = useContext(AppDataContext);
     const stats = useMemo(() => {
@@ -80,11 +146,68 @@ const DashboardStats = () => {
         return { rentedCount, vacantCount: houses.length - rentedCount, totalCollected, totalDue };
     }, [context]);
 
+    const handleExportPayments = () => {
+        if (!context) return;
+        const data = context.payments.map(p => {
+            const house = context.houses.find(h => h.id === p.houseId);
+            return {
+                Date: p.date.toLocaleDateString('en-GB'),
+                House: house?.name || 'Unknown',
+                Amount: p.amount,
+                Method: p.method,
+                Collector: 'Collector'
+            };
+        });
+        exportToCSV(data, ['Date', 'House', 'Amount', 'Method', 'Collector'], 'Payment_Report');
+    };
+
+    const handleExportHouses = () => {
+        if (!context) return;
+        const data = context.houses.map(h => {
+            const loc = context.locations.find(l => l.id === h.locationId);
+            return {
+                Name: h.name,
+                Location: loc?.name || '',
+                Status: h.tenantId ? 'Rented' : 'Vacant',
+                RentAmount: h.rentAmount,
+                DueAmount: h.dueAmount
+            };
+        });
+        exportToCSV(data, ['Name', 'Location', 'Status', 'Rent', 'Due'], 'Properties_Report');
+    };
+
+    const handleSharePaymentsPDF = () => {
+        if (!context) return;
+        const head = [['Date', 'Unit Name', 'Amount (SAR)', 'Method']];
+        const body = context.payments.map(p => {
+            const house = context.houses.find(h => h.id === p.houseId);
+            return [
+                p.date.toLocaleDateString('en-GB'),
+                house?.name || '-',
+                p.amount.toLocaleString(),
+                p.method
+            ];
+        });
+        sharePDF('Payments Report', head, body, 'payments_report');
+    };
+
+    const handleSharePropertiesPDF = () => {
+        if (!context) return;
+        const head = [['Unit', 'Status', 'Rent (SAR)', 'Due (SAR)']];
+        const body = context.houses.map(h => [
+            h.name,
+            h.tenantId ? 'Rented' : 'Vacant',
+            h.rentAmount.toLocaleString(),
+            h.dueAmount.toLocaleString()
+        ]);
+        sharePDF('Properties Status Report', head, body, 'properties_report');
+    };
+
     return (
         <div className="space-y-8 animate-fadeIn">
             <div className="flex justify-between items-center">
                 <h2 className="text-2xl font-bold text-gray-800">ملخص الأعمال اليوم</h2>
-                <div className="text-sm text-gray-500 bg-white px-4 py-2 rounded-full shadow-sm">{new Date().toLocaleDateString('ar-SA')}</div>
+                <div className="text-sm text-gray-500 bg-white px-4 py-2 rounded-full shadow-sm">{new Date().toLocaleDateString('en-GB')}</div>
             </div>
             
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -94,30 +217,60 @@ const DashboardStats = () => {
                 <StatBox label="عقارات شاغرة" value={stats.vacantCount} color="yellow" />
             </div>
 
-            <Card title="آخر المدفوعات المستلمة">
-                <div className="overflow-x-auto">
-                    <table className="w-full text-right">
-                        <thead className="text-gray-400 text-xs uppercase border-b">
-                            <tr>
-                                <th className="pb-3">الشقة</th>
-                                <th className="pb-3">المبلغ</th>
-                                <th className="pb-3">التاريخ</th>
-                                <th className="pb-3">المحصل</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y">
-                            {context?.payments.slice(-5).reverse().map(p => (
-                                <tr key={p.id} className="hover:bg-gray-50 transition-colors">
-                                    <td className="py-4 font-medium">{context.houses.find(h => h.id === p.houseId)?.name}</td>
-                                    <td className="py-4 text-green-600 font-bold">{p.amount.toLocaleString()} ريال</td>
-                                    <td className="py-4 text-xs text-gray-500">{p.date.toLocaleDateString('ar-SA')}</td>
-                                    <td className="py-4 text-xs">أحمد (محصل 1)</td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div className="lg:col-span-2">
+                    <Card title="آخر المدفوعات المستلمة">
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-right">
+                                <thead className="text-gray-400 text-xs uppercase border-b">
+                                    <tr>
+                                        <th className="pb-3">الشقة</th>
+                                        <th className="pb-3">المبلغ</th>
+                                        <th className="pb-3">التاريخ</th>
+                                        <th className="pb-3">المحصل</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y">
+                                    {context?.payments.slice(-5).reverse().map(p => (
+                                        <tr key={p.id} className="hover:bg-gray-50 transition-colors">
+                                            <td className="py-4 font-medium">{context.houses.find(h => h.id === p.houseId)?.name}</td>
+                                            <td className="py-4 text-green-600 font-bold">{p.amount.toLocaleString()} ريال</td>
+                                            <td className="py-4 text-xs text-gray-500">{p.date.toLocaleDateString('en-GB')}</td>
+                                            <td className="py-4 text-xs">أحمد (محصل 1)</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </Card>
                 </div>
-            </Card>
+                
+                <div className="lg:col-span-1">
+                    <Card title="مركز التقارير (Excel & PDF)" className="h-full flex flex-col justify-center">
+                        <div className="space-y-4">
+                            <p className="text-sm text-gray-500 mb-4">تصدير البيانات أو مشاركتها عبر واتساب (PDF).</p>
+                            
+                            <div className="grid grid-cols-2 gap-2">
+                                <Button onClick={handleExportPayments} variant="secondary" className="text-xs px-2" title="تصدير Excel">
+                                    <DownloadIcon className="w-4 h-4"/> سجل المدفوعات
+                                </Button>
+                                <Button onClick={handleSharePaymentsPDF} className="bg-green-600 hover:bg-green-700 text-xs px-2" title="مشاركة واتساب">
+                                    <WhatsAppIcon className="w-4 h-4"/> مشاركة PDF
+                                </Button>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-2">
+                                <Button onClick={handleExportHouses} variant="secondary" className="text-xs px-2" title="تصدير Excel">
+                                    <DownloadIcon className="w-4 h-4"/> حالة العقارات
+                                </Button>
+                                <Button onClick={handleSharePropertiesPDF} className="bg-green-600 hover:bg-green-700 text-xs px-2" title="مشاركة واتساب">
+                                    <WhatsAppIcon className="w-4 h-4"/> مشاركة PDF
+                                </Button>
+                            </div>
+                        </div>
+                    </Card>
+                </div>
+            </div>
         </div>
     );
 };
@@ -320,6 +473,27 @@ const CashHandoverScreen = () => {
     const context = useContext(AppDataContext);
     const [amount, setAmount] = useState(0);
 
+    const handleExport = () => {
+        if (!context) return;
+        const data = context.handovers.map(h => ({
+            Date: h.date.toLocaleDateString('en-GB'),
+            Amount: h.amount,
+            Collector: 'Collector 1' 
+        }));
+        exportToCSV(data, ['Date', 'Amount', 'Collector'], 'Cash_Handovers');
+    };
+
+    const handleShare = () => {
+        if (!context) return;
+        const head = [['Date', 'Amount (SAR)', 'Collector']];
+        const body = context.handovers.map(h => [
+            h.date.toLocaleDateString('en-GB'),
+            h.amount.toLocaleString(),
+            'Collector 1'
+        ]);
+        sharePDF('Cash Handovers Report', head, body, 'cash_handovers');
+    };
+
     return (
         <div className="space-y-6 animate-fadeIn">
             <h2 className="text-2xl font-bold">تسليم المبالغ النقدية</h2>
@@ -330,14 +504,26 @@ const CashHandoverScreen = () => {
                         if(amount > 0) { context?.addCashHandover(amount); setAmount(0); alert("تم الحفظ"); }
                     }}>تأكيد استلام المبلغ</Button>
                 </Card>
-                <Card title="تاريخ التسليمات">
-                    <div className="space-y-3">
-                        {context?.handovers.map(h => (
+                <Card>
+                     <div className="flex justify-between items-center mb-4 border-b pb-2">
+                        <h2 className="text-xl font-bold text-gray-800">تاريخ التسليمات</h2>
+                        <div className="flex gap-2">
+                             <button onClick={handleExport} className="p-1 rounded-full hover:bg-gray-100 text-gray-600 transition-colors" title="تصدير Excel">
+                                <DownloadIcon className="w-5 h-5"/>
+                             </button>
+                             <button onClick={handleShare} className="p-1 rounded-full hover:bg-green-50 text-green-600 transition-colors" title="مشاركة واتساب">
+                                <WhatsAppIcon className="w-5 h-5"/>
+                             </button>
+                        </div>
+                    </div>
+                    <div className="space-y-3 max-h-[400px] overflow-y-auto">
+                        {context?.handovers.slice().reverse().map(h => (
                             <div key={h.id} className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
                                 <span className="text-sm font-bold">{h.amount.toLocaleString()} ريال</span>
-                                <span className="text-xs text-gray-400">{h.date.toLocaleDateString('ar-SA')}</span>
+                                <span className="text-xs text-gray-400">{h.date.toLocaleDateString('en-GB')}</span>
                             </div>
                         ))}
+                         {context?.handovers.length === 0 && <p className="text-gray-400 text-center py-4">لا توجد سجلات</p>}
                     </div>
                 </Card>
             </div>
